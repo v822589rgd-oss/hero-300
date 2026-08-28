@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Hero 3D 2.0 — Mobile</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07111b;font-family:Arial,sans-serif;touch-action:none}
+#game{position:fixed;inset:0}
+#hud{position:fixed;top:max(12px,env(safe-area-inset-top));left:14px;right:14px;display:flex;justify-content:space-between;color:#fff;font-weight:800;font-size:18px;text-shadow:2px 2px 3px #000;pointer-events:none}
+#tip{position:fixed;top:52px;left:50%;transform:translateX(-50%);color:#fff;background:#0008;padding:7px 12px;border-radius:12px;font-size:13px}
+#stick{position:fixed;left:22px;bottom:max(24px,env(safe-area-inset-bottom));width:130px;height:130px;border-radius:50%;background:#ffffff22;border:2px solid #ffffff55}
+#knob{position:absolute;width:58px;height:58px;left:34px;top:34px;border-radius:50%;background:#ffffff66;border:2px solid #fff8}
+.btn{position:fixed;right:24px;width:82px;height:82px;border-radius:50%;border:2px solid #fff8;background:#ffffff2b;color:#fff;font-weight:800;font-size:16px;user-select:none}
+#jump{bottom:max(35px,env(safe-area-inset-bottom));background:#2f80ed99}
+#attack{right:120px;bottom:max(54px,env(safe-area-inset-bottom));background:#d83b4b99}
+#shop{right:24px;top:90px;width:54px;height:54px;border-radius:14px}
+.panel{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#06101bdd;color:#fff;text-align:center;padding:24px}
+.card{max-width:520px;background:#142335ee;border:1px solid #ffffff22;border-radius:24px;padding:28px;box-shadow:0 20px 60px #0008}
+h1{font-size:46px;margin:0 0 8px;color:#ffd52e}h2{font-size:40px;margin:0 0 14px}
+button{border:0;border-radius:15px;padding:15px 26px;background:#36bd61;color:#fff;font-size:20px;font-weight:800}
+.hidden{display:none}
+#boss{position:fixed;top:78px;left:22%;right:22%;height:14px;border:2px solid #fff;border-radius:10px;overflow:hidden;display:none}
+#bossFill{height:100%;width:100%;background:#e33}
+
+#minimap{position:fixed;right:16px;top:155px;width:150px;height:90px;background:#07111bcc;border:2px solid #ffffff55;border-radius:10px;display:none}
+#mission{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);color:#fff;background:#07111bcc;padding:7px 12px;border-radius:10px;font-size:13px;pointer-events:none}
+#flash{position:fixed;inset:0;background:#ff334455;pointer-events:none;opacity:0}
+
+</head>
+<body>
+<div id="game"></div>
+<div id="hud"><span>🪙 <b id="coins">0</b></span><span>❤️ <b id="lives">3</b></span><span>⚔️ <b id="power">1</b></span></div>
+<div id="tip">Двигайся джойстиком • ⚔️ атака • 🟦 прыжок</div>
+<div id="stick"><div id="knob"></div></div>
+<button class="btn" id="attack">⚔️</button>
+<button class="btn" id="jump">ПРЫЖОК</button>
+<button class="btn" id="shop">🛒</button>
+<div id="boss"><div id="bossFill"></div></div>
+<canvas id="minimap"></canvas>
+<div id="mission">Миссия: собери все монеты</div>
+<div id="flash"></div>
+
+<div id="menu" class="panel"><div class="card">
+<h1>HERO 3D 2.0</h1><p>Расширенная 3D-версия: карта, бой, магазин и босс.</p><p>Собирай монеты, побеждай врагов и доберись до босса.</p><p>Рекорд: <b id="bestMenu">0</b> 🏆</p>
+<button id="start">НАЧАТЬ</button>
+</div></div>
+
+<div id="shopPanel" class="panel hidden"><div class="card">
+<h2>🛒 Магазин</h2><p>Монеты: <b id="shopCoins">0</b></p>
+<p>❤️ Жизнь — 5 монет</p><button onclick="buyLife()">Купить</button>
+<p>⚔️ Сила — 8 монет</p><button onclick="buyPower()">Улучшить</button>
+<br><br><button onclick="closeShop()">Продолжить</button>
+</div></div>
+
+<div id="end" class="panel hidden"><div class="card">
+<h2 id="endTitle"></h2><p id="endText"></p><button id="again">ИГРАТЬ СНОВА</button>
+</div></div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x7bc9ef);
+scene.fog=new THREE.Fog(0x7bc9ef,35,95);
+
+const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,.1,150);
+camera.position.set(0,7,11);
+
+let renderer;
+try { renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'}); }
+catch(e){ document.body.innerHTML='<div style="color:white;padding:30px;font:20px Arial">На этом устройстве браузер не смог запустить WebGL 2.</div>'; throw e; }
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;
+document.getElementById('game').appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x4b7050,2.2));
+const sun=new THREE.DirectionalLight(0xffffff,2.4);sun.position.set(-20,30,10);sun.castShadow=true;scene.add(sun);
+
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshStandardMaterial({color:0x4b9a52}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+
+const grid=new THREE.GridHelper(100,50,0x39783d,0x5cac61);grid.position.y=.01;scene.add(grid);
+
+const player=new THREE.Group(); scene.add(player);
+const body=new THREE.Mesh(new THREE.BoxGeometry(1,1.5,.7),new THREE.MeshStandardMaterial({color:0x397bea}));
+body.position.y=1.15;body.castShadow=true;player.add(body);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.48,16,12),new THREE.MeshStandardMaterial({color:0xffc8a4}));
+head.position.y=2.15;head.castShadow=true;player.add(head);
+const sword=new THREE.Mesh(new THREE.BoxGeometry(.14,.14,1.2),new THREE.MeshStandardMaterial({color:0xe6e9ef,metalness:.8,roughness:.25}));
+sword.position.set(.75,1.25,0);sword.rotation.x=Math.PI/2;player.add(sword);
+
+let score=0,lives=3,power=1,level=1,vy=0,onGround=true,inv=0;
+let coins=[],enemies=[],boss=null,shots=[],particles=[],state='menu',shopOpen=false;
+let best=Number(localStorage.getItem('hero3d_best')||0), animTime=0, attackCooldown=0;
+document.getElementById('bestMenu').textContent=best;
+const keys={left:false,right:false,up:false,down:false};
+
+function makeBox(color,x,y,z,w=1,h=1,d=1){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color}));
+ m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
+}
+
+function buildWorld(){
+  // paths
+  for(let i=-4;i<=4;i++) makeBox(0x806b49,i*5,.12,0,4.2,.2,7);
+  // trees
+  for(const [x,z] of [[-20,-7],[-17,7],[-10,-9],[0,-8],[8,-9],[16,8],[22,-7],[5,8]]){
+    const trunk=makeBox(0x6b4025,x,1,z,.55,2,.55);
+    const crown=makeBox(0x247a42,x,2.5,z,1.9,2,1.9);
+  }
+  // rocks
+  for(const [x,z] of [[-4,4],[12,4],[-14,1],[19,1]]){
+    const r=makeBox(0x68727b,x,.45,z,1.1,.9,.9);
+    r.rotation.y=.3;
+  }
+}
+buildWorld();
+
+function makeCoin(x,z){
+ const m=new THREE.Mesh(new THREE.TorusGeometry(.32,.1,8,16),new THREE.MeshStandardMaterial({color:0xffd52e,metalness:.7,roughness:.2}));
+ m.position.set(x,.65,z);m.rotation.x=Math.PI/2;scene.add(m);coins.push(m);
+}
+function makeEnemy(x,z){
+ const m=makeBox(0xdc3d4b,x,.65,z,.9,1.3,.9);m.userData={speed:(Math.random()>.5?1:-1)*(1.1+level*.25),baseX:x};enemies.push(m);
+}
+function makeLevel(){
+ coins.forEach(x=>scene.remove(x)); enemies.forEach(x=>scene.remove(x)); if(boss)scene.remove(boss.mesh);
+ coins=[];enemies=[];boss=null;
+ for(let i=0;i<10;i++) makeCoin(-14+i*3.2,(i%2? -2:2));
+ makeEnemy(-6,-1);makeEnemy(4,2);if(level>=2)makeEnemy(11,-2);
+ if(level>=2){
+   boss={mesh:makeBox(0x762bd1,18,1.3,0,2.4,2.6,2.4),hp:15,max:15,dir:-1};
+   const crown=makeBox(0xffb52e,18,3,0,1.4,.25,1.4);boss.crown=crown;
+   boss.mesh.userData.boss=true;boss.crown.userData.bossCrown=true;
+   document.getElementById('boss').style.display='block';
+ } else document.getElementById('boss').style.display='none';
+ player.position.set(0,0,8);vy=0;inv=80;
+}
+function startGame(){
+ score=0;lives=3;power=1;level=1;makeLevel();state='play';
+ menu.classList.add('hidden');end.classList.add('hidden');shopPanel.classList.add('hidden');
+ document.getElementById('minimap').style.display='block';
+ document.getElementById('mission').textContent='Миссия: собери все монеты';
+}
+
+function burst(pos,color=0xffd52e,n=8){
+  for(let i=0;i<n;i++){
+    const p=new THREE.Mesh(new THREE.SphereGeometry(.06,6,6),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:1.5}));
+    p.position.copy(pos);p.userData.v=new THREE.Vector3((Math.random()-.5)*5,Math.random()*5,(Math.random()-.5)*5);p.userData.life=.6;
+    scene.add(p);particles.push(p);
+  }
+}
+function damage(){
+ if(inv>0)return;
+ lives--;inv=90;burst(player.position,0xff3d4b,14);
+ const f=document.getElementById('flash');f.style.opacity=.8;setTimeout(()=>f.style.opacity=0,120);
+ player.position.set(0,0,8);
+ if(lives<=0)finish(false);
+}
+function finish(win){
+ document.getElementById('minimap').style.display='none';
+ if(score>best){best=score;localStorage.setItem('hero3d_best',best);document.getElementById('bestMenu').textContent=best;}
+ state=win?'win':'lose';document.getElementById('endTitle').textContent=win?'ПОБЕДА! 🏆':'GAME OVER 💀';document.getElementById('endText').textContent=win?`Босс повержен! Монет: ${score}`:`Монет собрано: ${score}`;end.classList.remove('hidden');}
+function fire(){
+ if(state!=='play'||attackCooldown>0)return;
+ attackCooldown=.22;burst(new THREE.Vector3(player.position.x+.8,1.3,player.position.z),0xffd52e,4);
+ const s=new THREE.Mesh(new THREE.SphereGeometry(.13,8,8),new THREE.MeshStandardMaterial({color:0xffd52e,emissive:0xff7b00,emissiveIntensity:2}));
+ s.position.copy(player.position);s.position.y=1.3;s.userData.vz=-1;scene.add(s);shots.push(s);
+}
+function update(dt){
+ if(state!=='play')return;
+ animTime+=dt; if(attackCooldown>0)attackCooldown-=dt;
+ leg1.rotation.x=Math.sin(animTime*10)*.45; leg2.rotation.x=-Math.sin(animTime*10)*.45;
+ arm1.rotation.x=-Math.sin(animTime*10)*.18; arm2.rotation.x=Math.sin(animTime*10)*.18;
+ for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.userData.life-=dt;p.userData.v.y-=9*dt;p.position.addScaledVector(p.userData.v,dt);if(p.userData.life<=0){scene.remove(p);particles.splice(i,1)}}
+
+ let dx=(keys.right?1:0)-(keys.left?1:0), dz=(keys.down?1:0)-(keys.up?1:0);
+ const len=Math.hypot(dx,dz)||1;dx/=len;dz/=len;
+ player.position.x+=dx*(5.5+power*.3)*dt;player.position.z+=dz*(5.5+power*.3)*dt;
+ if(keys.up&&onGround){vy=9;onGround=false}
+ vy-=22*dt;player.position.y+=vy*dt;
+ if(player.position.y<=0){player.position.y=0;vy=0;onGround=true}
+ player.position.x=Math.max(-24,Math.min(24,player.position.x));player.position.z=Math.max(-12,Math.min(12,player.position.z));
+ if(inv>0)inv--;
+ sword.rotation.z=Math.sin(performance.now()/90)*.08;
+
+ coins.forEach((c,i)=>{c.rotation.z+=dt*3;if(c.position.distanceTo(player.position)<1.2){scene.remove(c);coins.splice(i,1);score++}});
+ enemies.forEach(e=>{
+   e.position.x+=e.userData.speed*dt;
+   if(Math.abs(e.position.x-e.userData.baseX)>4)e.userData.speed*=-1;
+   if(inv<=0&&e.position.distanceTo(player.position)<1.35)damage();
+ });
+ shots.forEach((s,i)=>{
+   s.position.z-=18*dt;
+   for(const e of enemies)if(s.position.distanceTo(e.position)<1){burst(e.position,0xff5533,7);scene.remove(s);shots.splice(i,1);e.position.x+=s.userData.vz*power;break}
+   if(boss&&s.position.distanceTo(boss.mesh.position)<2){boss.hp--;burst(boss.mesh.position,0xffb52e,9);scene.remove(s);shots.splice(i,1)}
+ });
+ if(boss){
+   boss.mesh.position.x+=boss.dir*dt*1.2;boss.crown.position.x=boss.mesh.position.x;
+   if(boss.mesh.position.x<14||boss.mesh.position.x>23)boss.dir*=-1;
+   boss.crown.position.z=boss.mesh.position.z;
+   document.getElementById('bossFill').style.width=(boss.hp/boss.max*100)+'%';
+   if(inv<=0&&boss.mesh.position.distanceTo(player.position)<2.2)damage();
+   if(boss.hp<=0){score+=15;burst(boss.mesh.position,0xffd52e,35);scene.remove(boss.mesh);scene.remove(boss.crown);boss=null;document.getElementById('boss').style.display='none'}
+ }
+ if(coins.length===0){
+   if(level===1){level=2;makeLevel();document.getElementById('mission').textContent='Миссия: победи босса'}
+   else if(!boss){document.getElementById('mission').textContent='Миссия выполнена!';finish(true);}
+ }
+ document.getElementById('coins').textContent=score;document.getElementById('lives').textContent=lives;document.getElementById('power').textContent=power;
+}
+
+function drawMinimap(){
+ const c=document.getElementById('minimap'),x=c.getContext('2d');c.width=300;c.height=180;
+ x.clearRect(0,0,300,180);x.fillStyle='#173b2a';x.fillRect(0,0,300,180);
+ const sx=5.5,sz=6.5,ox=150,oz=90;
+ x.fillStyle='#397bea';x.fillRect(ox+player.position.x*sx-4,oz+player.position.z*sz-4,8,8);
+ x.fillStyle='#ffd52e';for(const c1 of coins)x.fillRect(ox+c1.position.x*sx-2,oz+c1.position.z*sz-2,4,4);
+ x.fillStyle='#e33';for(const e of enemies)x.fillRect(ox+e.position.x*sx-3,oz+e.position.z*sz-3,6,6);
+ if(boss){x.fillStyle='#9b32d8';x.fillRect(ox+boss.mesh.position.x*sx-5,oz+boss.mesh.position.z*sz-5,10,10)}
+}
+function render(){
+ const target=new THREE.Vector3(player.position.x,2.2,player.position.z+10);
+ camera.position.lerp(new THREE.Vector3(player.position.x,6.8,player.position.z+10.5),.08);
+ camera.lookAt(target);
+ renderer.render(scene,camera);drawMinimap();
+}
+function loop(t){requestAnimationFrame(loop);const dt=Math.min(.033,(t-(loop.last||t))/1000);loop.last=t;update(dt);render()}
+requestAnimationFrame(loop);
+
+const stick=document.getElementById('stick'),knob=document.getElementById('knob');let sid=null;
+stick.addEventListener('touchstart',e=>{e.preventDefault();sid=e.changedTouches[0].identifier;moveStick(e.changedTouches[0])},{passive:false});
+stick.addEventListener('touchmove',e=>{e.preventDefault();for(const t of e.changedTouches)if(t.identifier===sid)moveStick(t)},{passive:false});
+stick.addEventListener('touchend',e=>{keys.left=keys.right=keys.up=keys.down=false;knob.style.left='34px';knob.style.top='34px';sid=null});
+function moveStick(t){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let x=t.clientX-cx,y=t.clientY-cy,d=Math.hypot(x,y);if(d>48){x=x/d*48;y=y/d*48}knob.style.left=(65+x-29)+'px';knob.style.top=(65+y-29)+'px';keys.left=x<-12;keys.right=x>12;keys.up=y<-12;keys.down=y>12}
+document.getElementById('jump').ontouchstart=e=>{e.preventDefault();if(onGround){vy=9;onGround=false}};
+document.getElementById('attack').ontouchstart=e=>{e.preventDefault();fire();if(navigator.vibrate)navigator.vibrate(12)};
+document.getElementById('start').onclick=startGame;document.getElementById('again').onclick=startGame;
+document.getElementById('shop').onclick=()=>{if(state==='play'){state='shop';shopOpen=true;document.getElementById('shopCoins').textContent=score;shopPanel.classList.remove('hidden')}};
+window.closeShop=()=>{shopOpen=false;shopPanel.classList.add('hidden');state='play'};
+window.buyLife=()=>{if(score>=5){score-=5;lives++;document.getElementById('shopCoins').textContent=score}};
+window.buyPower=()=>{if(score>=8){score-=8;power++;document.getElementById('shopCoins').textContent=score}};
+addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a')keys.left=true;if(e.key==='ArrowRight'||e.key.toLowerCase()==='d')keys.right=true;if(e.key==='ArrowUp'||e.key.toLowerCase()==='w')keys.up=true;if(e.key==='ArrowDown'||e.key.toLowerCase()==='s')keys.down=true;if(e.key===' ')fire();});
+addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a')keys.left=false;if(e.key==='ArrowRight'||e.key.toLowerCase()==='d')keys.right=false;if(e.key==='ArrowUp'||e.key.toLowerCase()==='w')keys.up=false;if(e.key==='ArrowDown'||e.key.toLowerCase()==='s')keys.down=false});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
